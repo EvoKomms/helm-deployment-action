@@ -100,6 +100,14 @@ An example value can be something like this:
 { "key": "db.username", "value": "postgres", "chart": "auth-service" }
 ```
 
+## Complex Values
+
+For complex values, you'd want to not use the helm set variable from the command line directly. Instead, you can use the `useFile` field to create a temporary values yaml file, and use that Helm can use to deploy the variable for the chart.
+
+```json
+{ "key": "db.config", "value": "{ \"host\": \"db.example.com\", \"port\": 5432, \"username\": \"postgres\", \"password\": \"mysecretpassword\" }", "useFile": true, "chart": "auth-service" }
+```
+
 ## Example Action
 
 The following example action will deploy the `auth-service` Helm chart.

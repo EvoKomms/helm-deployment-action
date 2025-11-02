@@ -42,3 +42,21 @@ jobs:
           environmentVariables: '{ "NODE_OPTIONS": "--max-old-space-size=8192", "JAVA_OPTS": "-Xms128m -Xmx256g", "SPRING_PROFILES_ACTIVE": "k8s,dev" }'
           tag: 'dummyimgtag'
           dryRun: true
+      - name: dryRun with values file
+        uses: ./
+        with:
+          helmChartUrl: oci://myregistry.example.com/mycompanyinc/auth-service
+          helmChartVersion: 1.2.3
+          githubSecretVariablePrefix: PROJECTX
+          deploymentEnvironment: DEV
+          namespace: project-x
+          helmConfigMapVariableName: config
+          helmSecretVariableName: secrets
+          helmEnvVarVariableName: envVars
+          kubeConfig: 'dummyConfigAsThisIsJustAdryRun'
+          secrets: ${{ toJson(secrets) }}
+          variables: ${{ toJson(vars) }}
+          environmentVariables: '{ "NODE_OPTIONS": "--max-old-space-size=8192", "JAVA_OPTS": "-Xms128m -Xmx256g", "SPRING_PROFILES_ACTIVE": "k8s,dev" }'
+          tag: 'dummyimgtag'
+          useFile: 'true'
+          dryRun: true
