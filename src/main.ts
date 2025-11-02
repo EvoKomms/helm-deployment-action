@@ -1,7 +1,8 @@
-import { execSync } from 'child_process';
+import { execSync } from 'node:child_process';
 import { GithubDto } from './github.value.dto';
 import { HelmEnvVarDto } from './helm.env.var.dto';
 import { HelmVariableDto } from './helm.variable.dto';
+import fs from 'node:fs';
 
 const dryRun = process.env.DRY_RUN === 'true';
 const name = process.env.NAME;
@@ -39,7 +40,9 @@ if (!helmChartUrl) {
   throw new Error('Misconfigured action. Helm chart URL is missing.');
 }
 
-Object.keys(secrets).forEach((secretName) => {
+let useFile: boolean = false;
+
+for (const secretName in secrets) {
   if (secretName.startsWith(`DEPLOYMENT_${prefix ? prefix.concat('_') : ''}${environment ? environment.concat('_') : ''}`)) {
     try {
       const varValue = JSON.parse(secrets[secretName]) as GithubDto;
@@ -47,16 +50,17 @@ Object.keys(secrets).forEach((secretName) => {
         if (dryRun) {
           console.log(`Configuring secret with key: ${secretName}`);
         }
-        helmSecrets.push({ key: varValue.key, value: varValue.value.replace(',', '\\,') });
+        helmSecrets.push({ key: varValue.key, useFile: varValue.useFile, value: varValue.value });
+        useFile = useFile || varValue.useFile === true;
       }
     } catch (e: unknown) {
       console.error(`Misconfigured Github Secret: ${secretName}. Please correct and re-run.`);
       throw e;
     }
   }
-});
+}
 
-Object.keys(variables).forEach((variableName) => {
+for (const variableName in variables) {
   if (variableName.startsWith(`DEPLOYMENT_${prefix ? prefix.concat('_') : ''}${environment ? environment.concat('_') : ''}`)) {
     try {
       const varValue = JSON.parse(variables[variableName]) as GithubDto;
@@ -64,40 +68,71 @@ Object.keys(variables).forEach((variableName) => {
         if (dryRun) {
           console.log(`Configuring Variable with key: ${variableName}`);
         }
-        helmConfigMaps.push({ key: varValue.key, value: varValue.value.replace(',', '\\,') });
+        helmConfigMaps.push({ key: varValue.key, useFile: varValue.useFile, value: varValue.value });
+        useFile = useFile || varValue.useFile === true;
       }
     } catch (err: unknown) {
       console.error(`Misconfigured Github Variable: ${variableName}. Please correct and re-run.`, err);
       process.exit(123);
     }
   }
-});
+}
 
-Object.keys(environmentVariables).forEach((environmentVariableName) => helmEnvVars.push({ name: environmentVariableName, value: environmentVariables[environmentVariableName] }));
+for (const environmentVariableName in environmentVariables) {
+  helmEnvVars.push({ name: environmentVariableName, value: environmentVariables[environmentVariableName] });
+}
 
 // We need to escape all the Go sequences.
 // Reference - https://stackoverflow.com/a/63636047/4546963
 
-helmSecrets.forEach((dto, idx) => {
-  helmDeploymentCommand = helmDeploymentCommand.concat(`--set ${helmSecretVariableName}[${idx}].key='${dto.key}' \\\n  `);
-  helmDeploymentCommand = helmDeploymentCommand.concat(`--set ${helmSecretVariableName}[${idx}].value='${dryRun ? '<REDACTED>' : escapeGoSpecialChars(dto.value)}' \\\n  `);
-});
+if (useFile) {
+  let valuesFileContent: string = '';
+  valuesFileContent += `${helmSecretVariableName}:\n`;
+  for (const dto of helmSecrets) {
+    valuesFileContent += `  - key: ${dto.key}\n`;
+    valuesFileContent += `    value: ${getValue(dto)}\n`;
+  }
+  valuesFileContent += `${helmConfigMapVariableName}:\n`;
+  for (const dto of helmConfigMaps) {
+    valuesFileContent += `  - key: ${dto.key}\n`;
+    valuesFileContent += `    value: ${getValue(dto)}\n`;
+  }
+  valuesFileContent += `${helmEnvVarVariableName}:\n`;
+  for (const dto of helmEnvVars) {
+    valuesFileContent += `  - name: ${dto.name}\n`;
+    valuesFileContent += `    value: ${getValue(dto)}\n`;
+  }
 
-helmConfigMaps.forEach((dto, idx) => {
-  helmDeploymentCommand = helmDeploymentCommand.concat(`--set ${helmConfigMapVariableName}[${idx}].key='${dto.key}' \\\n  `);
-  helmDeploymentCommand = helmDeploymentCommand.concat(`--set ${helmConfigMapVariableName}[${idx}].value='${dryRun ? '<REDACTED>' : escapeGoSpecialChars(dto.value)}' \\\n  `);
-});
+  fs.writeFileSync('.helmValues.yaml', valuesFileContent);
 
-helmEnvVars.forEach((dto, idx) => {
-  helmDeploymentCommand = helmDeploymentCommand.concat(`--set ${helmEnvVarVariableName}[${idx}].name='${dto.name}' \\\n  `);
-  helmDeploymentCommand = helmDeploymentCommand.concat(`--set ${helmEnvVarVariableName}[${idx}].value='${dryRun ? '<REDACTED>' : escapeGoSpecialChars(dto.value)}' \\\n  `);
-});
+  helmDeploymentCommand = helmDeploymentCommand.concat(`-f .helmValues.yaml \\\n  ${helmChartUrl}`);
+} else {
+  for (let idx = 0; idx < helmSecrets.length; idx++) {
+    const dto = helmSecrets[idx];
+    helmDeploymentCommand = helmDeploymentCommand.concat(`--set ${helmSecretVariableName}[${idx}].key='${dto.key}' \\\n  `);
+    helmDeploymentCommand = helmDeploymentCommand.concat(`--set ${helmSecretVariableName}[${idx}].value='${dto.value}' \\\n  `);
+  }
 
-if (helmChartVersion) {
-  helmDeploymentCommand = helmDeploymentCommand.concat(`--version ${helmChartVersion} \\\n  `);
+  for (let idx = 0; idx < helmConfigMaps.length; idx++) {
+    const dto = helmConfigMaps[idx];
+    helmDeploymentCommand = helmDeploymentCommand.concat(`--set ${helmConfigMapVariableName}[${idx}].key='${dto.key}' \\\n  `);
+    helmDeploymentCommand = helmDeploymentCommand.concat(`--set ${helmConfigMapVariableName}[${idx}].value='${dto.value}' \\\n  `);
+  }
+
+  for (let idx = 0; idx < helmEnvVars.length; idx++) {
+    const dto = helmEnvVars[idx];
+    helmDeploymentCommand = helmDeploymentCommand.concat(`--set ${helmEnvVarVariableName}[${idx}].name='${dto.name}' \\\n  `);
+    helmDeploymentCommand = helmDeploymentCommand.concat(`--set ${helmEnvVarVariableName}[${idx}].value='${dto.value}' \\\n  `);
+  }
+
+  if (helmChartVersion) {
+    helmDeploymentCommand = helmDeploymentCommand.concat(`--version ${helmChartVersion} \\\n  `);
+  }
+
+  helmDeploymentCommand = helmDeploymentCommand.concat(helmChartUrl);
 }
 
-helmDeploymentCommand = helmDeploymentCommand.concat(helmChartUrl);
+let hadError = false;
 
 if (dryRun) {
   console.log(`This is a Dry Run. Install command to be run: \n${helmDeploymentCommand}`);
@@ -106,12 +141,31 @@ if (dryRun) {
     console.log(execSync(helmDeploymentCommand).toString('utf-8'));
   } catch (err: unknown) {
     if (err instanceof Error) {
-      helmSecrets.forEach((dto) => sanitize(err, dto.value));
-      helmConfigMaps.forEach((dto) => sanitize(err, dto.value));
-      helmEnvVars.forEach((dto) => sanitize(err, dto.value));
+      for (const dto of helmSecrets) {
+        sanitize(err, dto.value);
+      }
+      for (const dto of helmConfigMaps) {
+        sanitize(err, dto.value);
+      }
+      for (const dto of helmEnvVars) {
+        sanitize(err, dto.value);
+      }
     }
     console.error('Error while trying to install helmchart', err);
-    process.exit(223);
+    hadError = true;
+  } finally {
+    if (fs.existsSync('.helmValues.yaml')) fs.rmSync('.helmValues.yaml');
+    process.exit(hadError ? 223 : 0);
+  }
+}
+
+function getValue(dto: HelmVariableDto | HelmEnvVarDto): string {
+  if (useFile && 'useFile' in dto && dto.useFile) {
+    return `|\n      ${dto.value}`;
+  } else if (useFile) {
+    return escapeGoSpecialChars(dto.value);
+  } else {
+    return escapeGoSpecialChars(dto.value);
   }
 }
 
@@ -121,5 +175,17 @@ function sanitize(err: Error, secret: string) {
 }
 
 function escapeGoSpecialChars(value: string): string {
-  return value.split(',').join('\\,').split('.').join('\\.').split('{').join('\\{').split('[').join('\\[').split(']').join('\\]').split('}').join('\\}');
+  return value
+    .split(',')
+    .join(String.raw`\,`)
+    .split('.')
+    .join(String.raw`\.`)
+    .split('{')
+    .join(String.raw`\{`)
+    .split('[')
+    .join(String.raw`\[`)
+    .split(']')
+    .join(String.raw`\]`)
+    .split('}')
+    .join(String.raw`\}`);
 }
