@@ -110,19 +110,19 @@ if (useFile) {
   for (let idx = 0; idx < helmSecrets.length; idx++) {
     const dto = helmSecrets[idx];
     helmDeploymentCommand = helmDeploymentCommand.concat(`--set ${helmSecretVariableName}[${idx}].key='${dto.key}' \\\n  `);
-    helmDeploymentCommand = helmDeploymentCommand.concat(`--set ${helmSecretVariableName}[${idx}].value='${dto.value}' \\\n  `);
+    helmDeploymentCommand = helmDeploymentCommand.concat(`--set ${helmSecretVariableName}[${idx}].value='${getValue(dto)}' \\\n  `);
   }
 
   for (let idx = 0; idx < helmConfigMaps.length; idx++) {
     const dto = helmConfigMaps[idx];
     helmDeploymentCommand = helmDeploymentCommand.concat(`--set ${helmConfigMapVariableName}[${idx}].key='${dto.key}' \\\n  `);
-    helmDeploymentCommand = helmDeploymentCommand.concat(`--set ${helmConfigMapVariableName}[${idx}].value='${dto.value}' \\\n  `);
+    helmDeploymentCommand = helmDeploymentCommand.concat(`--set ${helmConfigMapVariableName}[${idx}].value='${getValue(dto)}' \\\n  `);
   }
 
   for (let idx = 0; idx < helmEnvVars.length; idx++) {
     const dto = helmEnvVars[idx];
     helmDeploymentCommand = helmDeploymentCommand.concat(`--set ${helmEnvVarVariableName}[${idx}].name='${dto.name}' \\\n  `);
-    helmDeploymentCommand = helmDeploymentCommand.concat(`--set ${helmEnvVarVariableName}[${idx}].value='${dto.value}' \\\n  `);
+    helmDeploymentCommand = helmDeploymentCommand.concat(`--set ${helmEnvVarVariableName}[${idx}].value='${getValue(dto)}' \\\n  `);
   }
 
   if (helmChartVersion) {
