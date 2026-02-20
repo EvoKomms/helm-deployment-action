@@ -108,6 +108,26 @@ For complex values, you'd want to not use the helm set variable from the command
 { "key": "db.config", "value": "{ \"host\": \"db.example.com\", \"port\": 5432, \"username\": \"postgres\", \"password\": \"mysecretpassword\" }", "useFile": true, "chart": "auth-service" }
 ```
 
+## Direct Variables
+
+There may be situations where you'd want to pass direct helm variables, and set their values. For those, we can use the Github variables with a special prefix. For example, if the prefix is `HELMVAR`, the variable name will need to start with `DEPLOYMENT_<prefix>[_<environment>]_HELMVAR_`. An example value can be:
+
+```json
+{ "key": "ingress.tls[0].hosts[0]", "value": "my-svc.example.com", "chart": "common-config" }
+```
+
+This will be passed as `--set ingress.tls[0].hosts[0]=my-svc.example.com` in the Helm command during deployment.
+
+## Global Direct variables
+
+To support situations where the same direct variable needs to be passed to multiple (all) charts, the chart key is optional. This is only the case for direct helm variables, as opposed to configmaps and secrets, which might create confusion if the keys are the same across multiple configmaps and secrets. For direct variables on the other hand, if the chart key is not provided, the variable will be passed to all Helm charts during deployment.
+
+For example:
+
+```json
+{ "key": "baseSubdomain", "value": "prod-us-east1.example.com" }
+```
+
 ## Example Action
 
 The following example action will deploy the `auth-service` Helm chart.
