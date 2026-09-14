@@ -4,7 +4,7 @@
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\""
   },
   "devDependencies": {
-    "@types/node": "^26.4.1",
+    "@types/node": "^26.5.1",
     "@typescript-eslint/eslint-plugin": "^8.69.0",
     "@typescript-eslint/parser": "^8.69.0",
     "eslint": "^9.39.2",
